@@ -17,7 +17,7 @@ ADD . /go/src
 
 WORKDIR $GOPATH/src/app
 
-RUN go get .
+#RUN go get .
 RUN go get github.com/json-iterator/go
 RUN CGO_ENABLED=0 go build -tags=jsoniter -a -installsuffix cgo -o /go/bin/server .
 
