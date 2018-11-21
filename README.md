@@ -3,7 +3,12 @@
 
 Fake API server for testing. Creates a series of HTTP endpoints for testing services that pull/scrape data.
 
-### Install
+### Install / Run
+
+**Docker**:
+```bash
+docker run --rm -p 8085:8085 txn2/fxapi:latest -port=8085
+```
 
 MackOs (with homebrew):
 ```bash
