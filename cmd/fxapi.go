@@ -25,9 +25,17 @@ var Version = "0.0.0"
 func main() {
 	// Counter for calls to this service
 	calls := promauto.NewCounter(prometheus.CounterOpts{
-		Name: "total_api_calls",
+		Name: "fxapi_total_api_calls",
 		Help: "Total number api calls.",
 	})
+
+	counter := promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fxapi_counter_api",
+			Help: "API counter.",
+		},
+		[]string{"name"},
+	)
 
 	// UUID for this process
 	callUuidV4, _ := uuid.NewV4()
@@ -44,7 +52,13 @@ func main() {
 
 	port := flag.String("port", portEnv, "The port to listen on for HTTP requests.")
 	debug := flag.String("debug", debugEnv, "debug mode true or false.")
+	version := flag.Bool("version", false, "display version and exit.")
 	flag.Parse()
+
+	if *version == true {
+		fmt.Printf("fxapi Version %s", Version)
+		os.Exit(0)
+	}
 
 	if *debug == "false" {
 		gin.SetMode(gin.ReleaseMode)
@@ -67,7 +81,8 @@ func main() {
 		mmf, err := getMetrics()
 		if err != nil {
 			logger.Error("Error gather metrics", zap.Error(err))
-
+			c.JSON(500, "can not gather metrics")
+			return
 		}
 
 		r.Routes()
@@ -75,28 +90,65 @@ func main() {
 		c.JSON(200, gin.H{
 			"message":       "ok",
 			"time":          time.Now(),
-			"calls":         mmf["total_api_calls"].Metric[0].Counter.Value,
+			"calls":         mmf["fxapi_total_api_calls"].Metric[0].Counter.Value,
 			"uuid_call":     instanceUuidV4.String(),
 			"uuid_instance": callUuidV4.String(),
 			"version":       Version,
 		})
 	})
 
-	// Epoch
+	// Counter
+	r.GET("/counter/:name/:add", func(c *gin.Context) {
+		name := c.Param("name")
+
+		addInt, err := strconv.Atoi(c.Param("add"))
+		if err != nil {
+			c.String(500, "add can not be converted to an int")
+			logger.Error("add int conversion error", zap.Error(err))
+			return
+		}
+
+		counter.With(prometheus.Labels{"name": name}).Add(float64(addInt))
+
+		mmf, err := getMetrics()
+		if err != nil {
+			logger.Error("Error gather metrics", zap.Error(err))
+			c.String(500, "can not gather metrics")
+			return
+		}
+
+		// find the metric we just updated
+		for _, m := range mmf["fxapi_counter_api"].Metric {
+			for _, l := range m.Label {
+				if *l.Name == "name" && *l.Value == name {
+					c.String(200, fmt.Sprintf("%.0f", *m.Counter.Value))
+					return
+				}
+			}
+
+		}
+
+		logger.Error("Error finding metric", zap.Error(err))
+		c.String(500, "can not fine metric")
+	})
+
+	// Curve over a minute
 	r.GET("/curve/:high/:std/:dec", func(c *gin.Context) {
 
 		dec := c.Param("dec")
 
 		highInt, err := strconv.Atoi(c.Param("high"))
 		if err != nil {
-			c.String(500, "high can not be converted to a string")
 			logger.Error("high int conversion error", zap.Error(err))
+			c.String(500, "high can not be converted to a number")
+			return
 		}
 
 		std, err := strconv.Atoi(c.Param("std"))
 		if err != nil {
-			c.String(500, "std can not be converted to a string")
 			logger.Error("std int conversion error", zap.Error(err))
+			c.String(500, "std can not be converted to a number")
+			return
 		}
 
 		num := (float64(highInt) * minuteCurve()) + (rand.Float64() * float64(std))
@@ -114,7 +166,7 @@ func main() {
 		c.String(200, fmt.Sprintf("%d", time.Now().Unix()))
 	})
 
-	// Epoch
+	// Second of the minute
 	r.GET("/second", func(c *gin.Context) {
 		c.String(200, fmt.Sprintf("%d", time.Now().Second()))
 	})
@@ -122,6 +174,33 @@ func main() {
 	// Random Text
 	r.GET("/lorem", func(c *gin.Context) {
 		c.String(200, lorem.Sentence(5, 20))
+	})
+
+	// Fixed Number
+	r.GET("/fixed-number/:num", func(c *gin.Context) {
+		c.String(200, fmt.Sprintf("%s", c.Param("num")))
+	})
+
+	// Random Int
+	r.GET("/random-int/:from/:to", func(c *gin.Context) {
+
+		fInt, err := strconv.Atoi(c.Param("from"))
+		if err != nil {
+			logger.Error("from int conversion error", zap.Error(err))
+			c.String(500, "from can not be converted to a number")
+			return
+		}
+
+		tInt, err := strconv.Atoi(c.Param("to"))
+		if err != nil {
+			logger.Error("to int conversion error", zap.Error(err))
+			c.String(500, "to can not be converted to a number")
+			return
+		}
+
+		rInt := rand.Intn(tInt-fInt) + fInt
+
+		c.String(200, fmt.Sprintf("%d", rInt))
 	})
 
 	// Prometheus Metrics
