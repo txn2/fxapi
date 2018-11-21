@@ -138,7 +138,7 @@ dockers:
     goos: linux
     goarch: arm
     goarm: 6
-    binary: xn2
+    binary: fxapi
     image: txn2/fxapi
     dockerfile: ./dockerfiles/arm32v6/Dockerfile
     tag_templates:

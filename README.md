@@ -95,8 +95,3 @@ Release:
 ```bash
 GITHUB_TOKEN=$GITHUB_TOKEN goreleaser --rm-dist
 ```
-
-
-```bash
-
-```
