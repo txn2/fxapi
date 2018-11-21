@@ -37,6 +37,22 @@ func main() {
 		[]string{"name"},
 	)
 
+	incCounter := promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fxapi_inc_api",
+			Help: "API incrementer.",
+		},
+		[]string{"name"},
+	)
+
+	incSum := promauto.NewSummaryVec(
+		prometheus.SummaryOpts{
+			Name: "fxapi_inc_api_sum",
+			Help: "incrementer API summaries.",
+		},
+		[]string{"name"},
+	)
+
 	// UUID for this process
 	callUuidV4, _ := uuid.NewV4()
 
@@ -97,6 +113,89 @@ func main() {
 		})
 	})
 
+	// Incrementer returns a random number a counter for a name
+	// was incremented by
+	r.GET("/inc/update/:name/:min/:max", func(c *gin.Context) {
+		name := c.Param("name")
+
+		minInt, err := strconv.Atoi(c.Param("min"))
+		if err != nil {
+			logger.Error("min int conversion error", zap.Error(err))
+			c.String(500, "min can not be converted to a number")
+			return
+		}
+
+		maxInt, err := strconv.Atoi(c.Param("max"))
+		if err != nil {
+			logger.Error("max int conversion error", zap.Error(err))
+			c.String(500, "max can not be converted to a number")
+			return
+		}
+
+		rInt := rand.Intn(maxInt-minInt) + minInt
+
+		incCounter.With(prometheus.Labels{"name": name}).Add(float64(rInt))
+		incSum.With(prometheus.Labels{"name": name}).Observe(float64(rInt))
+
+		c.String(200, fmt.Sprintf("%d", rInt))
+	})
+
+	// Inc Count
+	r.GET("/inc/count/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		mmf, err := getMetrics()
+		if err != nil {
+			logger.Error("Error gathering metrics", zap.Error(err))
+			c.String(500, "can not gather metrics")
+			return
+		}
+
+		// find the metric we just updated
+		for _, m := range mmf["fxapi_inc_api"].Metric {
+			for _, l := range m.Label {
+				if *l.Name == "name" && *l.Value == name {
+					c.String(200, fmt.Sprintf("%.0f", *m.Counter.Value))
+					return
+				}
+			}
+
+		}
+
+		logger.Error("Error finding metric", zap.Error(err))
+		c.String(500, "can not fine metric")
+	})
+
+	// Inc Summary
+	r.GET("/inc/summary/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		mmf, err := getMetrics()
+		if err != nil {
+			logger.Error("Error gathering metrics", zap.Error(err))
+			c.String(500, "can not gather metrics")
+			return
+		}
+
+		// find the metric we just updated
+		for _, m := range mmf["fxapi_inc_api_sum"].Metric {
+			for _, l := range m.Label {
+				if *l.Name == "name" && *l.Value == name {
+					for _, q := range m.Summary.Quantile {
+						if *q.Quantile == float64(.5) {
+							c.String(200, fmt.Sprintf("%.0f", *q.Value))
+							return
+						}
+					}
+				}
+			}
+
+		}
+
+		logger.Error("Error finding metric", zap.Error(err))
+		c.String(500, "can not fine metric")
+	})
+
 	// Counter
 	r.GET("/counter/:name/:add", func(c *gin.Context) {
 		name := c.Param("name")
@@ -112,7 +211,7 @@ func main() {
 
 		mmf, err := getMetrics()
 		if err != nil {
-			logger.Error("Error gather metrics", zap.Error(err))
+			logger.Error("Error gathering metrics", zap.Error(err))
 			c.String(500, "can not gather metrics")
 			return
 		}
@@ -179,6 +278,11 @@ func main() {
 	// Fixed Number
 	r.GET("/fixed-number/:num", func(c *gin.Context) {
 		c.String(200, fmt.Sprintf("%s", c.Param("num")))
+	})
+
+	// Fxied metric
+	r.GET("/metric/:data", func(c *gin.Context) {
+		c.String(200, fmt.Sprintf("%s", c.Param("data")))
 	})
 
 	// Random Int
