@@ -3,12 +3,25 @@
 
 Fake API server for testing. Creates a series of HTTP endpoints for testing services that pull/scrape data.
 
-### Install / Run
-
 **Docker**:
 ```bash
 docker run --rm -p 8085:8085 txn2/fxapi:latest -port=8085
 ```
+
+**Endpoints**:
+
+Description | Route | Example | Example Output
+----------- | ----- | ------- | ------
+Update a counter | /counter/:name/:add  | curl localhost:8085/counter/test_a/10 | 10
+Number curved over one minute | /curve/:high/:std/:dec | curl localhost:8085/curve/1000/5/2 | 766.99
+Epoch (unixtime) | /epoch | curl localhost:8085/epoch | 1542835090
+Current second of the minute. | /second | curl localhost:8085/second | 12
+String of random text | /loram | curl localhost:8085/lorem | Pro qui tibi inveni dum qua fit donec amare illic mea regem falli contexo pro peregrinorum.
+Fixed number. | /fixed-number/:num | curl localhost:8085/fixed-number/999.9 | 999.9
+Random integer in range. | /random-int/:from/:to | curl localhost:8085/random-int/100/200 | 138
+Prometheus Metrics | /metrics | http://localhost:8085/metrics | (Prometheus style metrics output)
+
+### Install
 
 MackOs (with homebrew):
 ```bash
